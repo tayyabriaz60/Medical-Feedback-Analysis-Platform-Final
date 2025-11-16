@@ -54,18 +54,39 @@ def _truncate_password_for_bcrypt(password: str) -> str:
     if not isinstance(password, str):
         password = str(password)
     password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
+    original_len = len(password_bytes)
+    if original_len > 72:
         # Truncate to exactly 72 bytes
         truncated_bytes = password_bytes[:72]
         # Decode back to string, handling any incomplete UTF-8 sequences
         password = truncated_bytes.decode('utf-8', errors='ignore')
+        logger.warning(
+            f"Password truncated from {original_len} bytes to 72 bytes (bcrypt limit). "
+            f"Only first 72 bytes will be used for hashing."
+        )
     return password
 
 
 def hash_password(password: str) -> str:
     # Bcrypt has a 72-byte limit for passwords
+    # Truncate BEFORE passing to passlib to avoid initialization errors
     password = _truncate_password_for_bcrypt(password)
-    return pwd_context.hash(password)
+    # Verify truncation worked
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        logger.error(f"Password still too long after truncation: {len(password_bytes)} bytes")
+        # Force truncate again
+        password = password_bytes[:72].decode('utf-8', errors='ignore')
+    try:
+        return pwd_context.hash(password)
+    except ValueError as e:
+        if "cannot be longer than 72 bytes" in str(e):
+            logger.error(f"Bcrypt error despite truncation. Password length: {len(password.encode('utf-8'))} bytes")
+            # Last resort: force to 72 bytes
+            password_bytes = password.encode('utf-8')[:72]
+            password = password_bytes.decode('utf-8', errors='ignore')
+            return pwd_context.hash(password)
+        raise
 
 
 def verify_password(password: str, password_hash: str) -> bool:
