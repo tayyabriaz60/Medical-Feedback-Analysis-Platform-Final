@@ -4,7 +4,7 @@ import os
 import secrets
 import hashlib
 
-from passlib.context import CryptContext
+import bcrypt
 from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -12,10 +12,6 @@ from sqlalchemy import select, func
 from app.models.user import User
 from app.logging_config import get_logger
 
-
-# Use bcrypt_sha256 which handles long passwords better and avoids bcrypt version compatibility issues
-# Pre-hash with SHA-256 to ensure password is always 64 bytes (hex) before bcrypt
-pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
 logger = get_logger(__name__)
 
 JWT_ALGORITHM = "HS256"
@@ -71,33 +67,34 @@ def _truncate_password_for_bcrypt(password: str) -> str:
 
 def hash_password(password: str) -> str:
     """
-    Hash password using bcrypt_sha256 scheme.
+    Hash password using bcrypt with SHA-256 pre-hashing.
     Pre-hash with SHA-256 to ensure password is always 64 bytes (hex) before bcrypt,
     avoiding bcrypt's 72-byte limit and compatibility issues.
+    Uses bcrypt library directly to avoid passlib initialization issues.
     """
     if not isinstance(password, str):
         password = str(password)
     
     # Pre-hash with SHA-256 to ensure consistent 64-byte input
-    # This prevents any issues with long passwords during passlib initialization
+    # SHA-256 hex digest is always exactly 64 bytes (32 bytes * 2 for hex)
     password_bytes = password.encode('utf-8')
-    sha256_hash = hashlib.sha256(password_bytes).hexdigest()  # Always 64 bytes (hex)
+    sha256_hash = hashlib.sha256(password_bytes).hexdigest()  # Always 64 bytes (hex string)
     
-    try:
-        # bcrypt_sha256 will hash this SHA-256 hash again with bcrypt
-        # This double-hashing is secure and ensures we never exceed 72 bytes
-        return pwd_context.hash(sha256_hash)
-    except Exception as e:
-        logger.error(f"Password hashing failed: {e}")
-        # Last resort: use plain bcrypt with truncated password
-        password = _truncate_password_for_bcrypt(password)
-        return pwd_context.hash(password)
+    # Convert to bytes for bcrypt (SHA-256 hex is 64 bytes, well under 72-byte limit)
+    sha256_bytes = sha256_hash.encode('utf-8')
+    
+    # Use bcrypt directly (bypasses passlib initialization issues)
+    # SHA-256 hash is always 64 bytes, so no truncation needed
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(sha256_bytes, salt)
+    return hashed.decode('utf-8')
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     """
-    Verify password using bcrypt_sha256 scheme.
+    Verify password using bcrypt with SHA-256 pre-hashing.
     Pre-hash with SHA-256 to match hash_password behavior.
+    Uses bcrypt library directly to avoid passlib initialization issues.
     """
     if not isinstance(password, str):
         password = str(password)
@@ -106,13 +103,16 @@ def verify_password(password: str, password_hash: str) -> bool:
     password_bytes = password.encode('utf-8')
     sha256_hash = hashlib.sha256(password_bytes).hexdigest()  # Always 64 bytes (hex)
     
+    # Convert to bytes for bcrypt
+    sha256_bytes = sha256_hash.encode('utf-8')
+    password_hash_bytes = password_hash.encode('utf-8')
+    
     try:
-        return pwd_context.verify(sha256_hash, password_hash)
+        # Use bcrypt directly (bypasses passlib initialization issues)
+        return bcrypt.checkpw(sha256_bytes, password_hash_bytes)
     except Exception as e:
         logger.error(f"Password verification failed: {e}")
-        # Fallback: try with truncated password
-        password = _truncate_password_for_bcrypt(password)
-        return pwd_context.verify(password, password_hash)
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
