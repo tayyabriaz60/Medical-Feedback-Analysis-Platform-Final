@@ -1,8 +1,23 @@
 // API Base URL - Use current origin for production compatibility
 const API_BASE = window.location.origin;
 
+// Session management - Use sessionStorage instead of localStorage
+// sessionStorage automatically clears when tab/browser closes
+function getToken() {
+    return sessionStorage.getItem('access_token');
+}
+
+function setToken(token) {
+    sessionStorage.setItem('access_token', token);
+}
+
+function removeToken() {
+    sessionStorage.removeItem('access_token');
+    sessionStorage.removeItem('role');
+}
+
 // Socket.IO connection
-const token = localStorage.getItem('access_token');
+const token = getToken();
 const socket = io(API_BASE, token ? { auth: { token: `Bearer ${token}` } } : {});
 
 const SENTIMENT_CLASSES = ['positive', 'negative', 'neutral', 'mixed'];
@@ -20,7 +35,7 @@ const SecurityUtils = {
 };
 
 function redirectToLogin() {
-    try { localStorage.removeItem('access_token'); } catch {}
+    try { removeToken(); } catch {}
     showAlert('Session expired. Redirecting to staff login...', 'error');
     setTimeout(() => { window.location.href = '/staff'; }, 1000);
 }
@@ -28,11 +43,12 @@ function redirectToLogin() {
 function renderAuthControls() {
     const container = document.getElementById('authControls');
     if (!container) return;
-    if (token) {
+    const currentToken = getToken();
+    if (currentToken) {
         container.innerHTML = `<button class="btn btn-secondary" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>`;
         const btn = document.getElementById('logoutBtn');
         btn && btn.addEventListener('click', () => {
-            try { localStorage.removeItem('access_token'); } catch {}
+            try { removeToken(); } catch {}
             window.location.href = '/staff';
         });
     } else {
@@ -40,9 +56,58 @@ function renderAuthControls() {
     }
 }
 
+// Session management - Handle tab change and browser close
+function setupSessionManagement() {
+    // Detect tab visibility change (user switches tabs)
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            // Tab hidden - user switched to another tab
+            // Don't clear session yet, just log
+            console.log('Tab hidden');
+        } else {
+            // Tab visible again - check if session still valid
+            const currentToken = getToken();
+            if (currentToken) {
+                // Validate token when tab becomes visible
+                fetch(`${API_BASE}/auth/me`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${currentToken}` }
+                }).catch(() => {
+                    // If validation fails, clear session
+                    removeToken();
+                });
+            }
+        }
+    });
+    
+    // Detect browser close/refresh
+    window.addEventListener('beforeunload', () => {
+        // sessionStorage automatically clears on tab close
+        // But we can also explicitly clear if needed
+        console.log('Page unloading - session will be cleared');
+    });
+    
+    // Detect page navigation (back/forward)
+    window.addEventListener('pageshow', (event) => {
+        // If page loaded from cache (back/forward navigation)
+        if (event.persisted) {
+            // Check if token still exists
+            const currentToken = getToken();
+            if (!currentToken) {
+                // Token cleared (tab was closed), redirect to login
+                window.location.href = '/staff';
+            }
+        }
+    });
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    const isStaff = !!token;
+    // Setup session management
+    setupSessionManagement();
+    
+    const currentToken = getToken();
+    const isStaff = !!currentToken;
 
     renderAuthControls();
 
@@ -243,7 +308,8 @@ async function loadFeedback() {
         if (urgency) url += `&priority=${encodeURIComponent(urgency)}`;
 
         const headers = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const currentToken = getToken();
+        if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
         const response = await fetch(url, { headers });
         const data = await response.json();
         if (response.status === 401) {
@@ -342,8 +408,9 @@ async function loadUrgentFeedback() {
 
     try {
         const headers = {};
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
+        const currentToken = getToken();
+        if (currentToken) {
+            headers['Authorization'] = `Bearer ${currentToken}`;
         } else {
             console.warn('No token found - urgent feedback requires authentication');
             container.innerHTML = '<div class="loading">Please login to view urgent feedback</div>';
@@ -514,7 +581,8 @@ document.getElementById('actionForm').addEventListener('submit', async (e) => {
 async function viewFeedback(id) {
     try {
         const headers = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const currentToken = getToken();
+        if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
         const response = await fetch(`${API_BASE}/feedback/${id}`, { headers });
         const feedback = await response.json();
         if (response.status === 401) {
@@ -607,7 +675,8 @@ window.onclick = function(event) {
 async function loadAnalytics() {
     try {
         const headers = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const currentToken = getToken();
+        if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
         const [summaryResponse, trendsResponse] = await Promise.all([
             fetch(`${API_BASE}/analytics/summary`, { headers }),
             fetch(`${API_BASE}/analytics/trends`, { headers })

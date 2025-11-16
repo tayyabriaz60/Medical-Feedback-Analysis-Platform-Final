@@ -46,8 +46,8 @@
         // This ensures that if user clicks back button to login page, they are logged out
         function clearSession() {
             try {
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('role');
+                sessionStorage.removeItem('access_token');
+                sessionStorage.removeItem('role');
                 console.log('Session cleared - user logged out');
             } catch (error) {
                 console.error('Error clearing session:', error);
@@ -75,9 +75,9 @@
                     throw new Error(err.detail || 'Login failed');
                 }
                 const data = await res.json();
-                // Persist token for protected API calls and sockets
-                localStorage.setItem('access_token', data.access_token);
-                localStorage.setItem('role', data.role || '');
+                // Persist token in sessionStorage (clears on tab close)
+                sessionStorage.setItem('access_token', data.access_token);
+                sessionStorage.setItem('role', data.role || '');
                 // Redirect to dashboard (existing UI at /)
                 window.location.href = '/';
             } catch (err) {
