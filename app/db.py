@@ -20,6 +20,11 @@ MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "10"))
 POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))
 POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "3600"))
 
+# Ensure DATABASE_URL uses asyncpg driver (Render might provide postgresql:// format)
+if DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+    logger.info("Converted DATABASE_URL to use asyncpg driver")
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=SQL_ECHO,
