@@ -47,10 +47,21 @@ def generate_secret_key() -> str:
 
 
 def hash_password(password: str) -> str:
+    # Bcrypt has a 72-byte limit for passwords
+    # Truncate if necessary to prevent errors
+    if isinstance(password, str):
+        password_bytes = password.encode('utf-8')
+        if len(password_bytes) > 72:
+            password = password_bytes[:72].decode('utf-8', errors='ignore')
     return pwd_context.hash(password)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
+    # Truncate password to 72 bytes to match hash_password behavior
+    if isinstance(password, str):
+        password_bytes = password.encode('utf-8')
+        if len(password_bytes) > 72:
+            password = password_bytes[:72].decode('utf-8', errors='ignore')
     return pwd_context.verify(password, password_hash)
 
 

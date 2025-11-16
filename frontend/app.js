@@ -1,5 +1,5 @@
-// API Base URL
-const API_BASE = 'http://127.0.0.1:8000';
+// API Base URL - Use current origin for production compatibility
+const API_BASE = window.location.origin;
 
 // Socket.IO connection
 const token = localStorage.getItem('access_token');
