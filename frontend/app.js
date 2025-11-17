@@ -101,30 +101,14 @@ function setupSessionManagement() {
     });
 }
 
-// Check if user is logged in on dashboard load
-function checkDashboardAccess() {
-    const currentToken = getToken();
-    if (!currentToken) {
-        // No token on dashboard - redirect to login
-        window.location.href = '/staff';
-    }
-}
-
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     // Setup session management
     setupSessionManagement();
     
-    // Check if user is logged in (runs on dashboard)
+    // Check if user is logged in
     const currentToken = getToken();
     const isStaff = !!currentToken;
-    
-    // If no token on dashboard, redirect to login
-    if (!isStaff && document.getElementById('dashboardTab')) {
-        // We're on the main dashboard page but not logged in
-        window.location.href = '/staff';
-        return;
-    }
 
     renderAuthControls();
 

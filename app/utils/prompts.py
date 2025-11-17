@@ -60,4 +60,3 @@ def get_analysis_prompt(feedback_text: str, department: str, doctor_name: str = 
         visit_date=visit_date or "Not specified",
         rating=rating or "Not specified"
     )
-
