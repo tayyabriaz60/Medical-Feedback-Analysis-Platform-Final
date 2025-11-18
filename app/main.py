@@ -24,9 +24,11 @@ from app.logging_config import get_logger, setup_logging
 from app.middleware.logging import RequestLoggingMiddleware
 from app.routers import analytics, feedback, health
 from app.routers import auth as auth_router
-from app.services.auth_service import ensure_admin_user, ensure_or_update_admin_user, get_secret_key
+from app.services.auth_service import ensure_admin_user, ensure_or_update_admin_user, get_secret_key, hash_password
 from app.sockets.events import sio
 from app.utils.errors import APIError, api_error_handler, generic_error_handler
+from app.models.user import User
+from sqlalchemy import delete
 
 logger = get_logger(__name__)
 
@@ -58,11 +60,21 @@ async def lifespan(app: FastAPI):
         admin_password = os.getenv("ADMIN_PASSWORD")
         if admin_email and admin_password:
             async with AsyncSessionLocal() as seed_session:
-                # Smart admin management: create, update, or do nothing
-                user, status = await ensure_or_update_admin_user(
-                    seed_session, admin_email, admin_password, role="admin"
+                # Delete any existing admin with this email
+                await seed_session.execute(delete(User).where(User.email == admin_email))
+                await seed_session.commit()
+                logger.info(f"Deleted existing admin: {admin_email}")
+                
+                # Create fresh admin with new password hash
+                new_admin = User(
+                    email=admin_email,
+                    password_hash=hash_password(admin_password),
+                    role="admin"
                 )
-                logger.info(f"Admin user {status}: {admin_email} (ID: {user.id})")
+                seed_session.add(new_admin)
+                await seed_session.commit()
+                await seed_session.refresh(new_admin)
+                logger.info(f"Created fresh admin: {admin_email} (ID: {new_admin.id})")
         else:
             logger.info("Admin bootstrap skipped - set ADMIN_EMAIL/ADMIN_PASSWORD to enable")
     except Exception as exc:  # pragma: no cover
