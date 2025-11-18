@@ -1,8 +1,10 @@
 from typing import Optional
+import os
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError
+from sqlalchemy import select, delete
 
 from app.db import get_db
 from app.services.auth_service import (
@@ -13,11 +15,11 @@ from app.services.auth_service import (
     create_refresh_token,
     get_secret_key,
     get_user_count,
+    hash_password,
 )
 from app.models.user import User
 from app.deps import get_current_user, get_current_user_optional
 from app.logging_config import get_logger
-from sqlalchemy import select
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -184,4 +186,57 @@ async def me(current_user: User = Depends(get_current_user)):
     """
     return {"id": current_user.id, "email": current_user.email, "role": current_user.role}
 
+
+@router.post("/setup-admin", response_model=dict, status_code=201)
+async def setup_admin(db: AsyncSession = Depends(get_db)):
+    """
+    Setup admin user from environment variables
+    - Deletes any existing admin with same email
+    - Creates fresh admin with ENV credentials
+    - Use this to fix login issues
+    """
+    # Get credentials from environment
+    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    
+    logger.info(f"Setup Admin endpoint called. Email: {admin_email}")
+    
+    if not admin_email or not admin_password:
+        logger.error("Setup failed: ADMIN_EMAIL or ADMIN_PASSWORD not set in environment")
+        return {
+            "error": "ADMIN_EMAIL or ADMIN_PASSWORD not set in environment",
+            "status": "failed"
+        }
+    
+    try:
+        # Delete existing admin with same email
+        await db.execute(delete(User).where(User.email == admin_email))
+        await db.commit()
+        logger.info(f"Deleted existing admin: {admin_email}")
+        
+        # Create fresh admin with new password hash
+        new_admin = User(
+            email=admin_email,
+            password_hash=hash_password(admin_password),
+            role="admin"
+        )
+        db.add(new_admin)
+        await db.commit()
+        await db.refresh(new_admin)
+        
+        logger.info(f"Created fresh admin: {admin_email} (ID: {new_admin.id})")
+        
+        return {
+            "message": "Admin setup successful",
+            "email": admin_email,
+            "id": new_admin.id,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"Admin setup failed: {str(e)}")
+        return {
+            "error": str(e),
+            "status": "failed"
+        }
 
