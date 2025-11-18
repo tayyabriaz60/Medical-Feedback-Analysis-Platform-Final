@@ -58,26 +58,33 @@ async def lifespan(app: FastAPI):
     try:
         admin_email = os.getenv("ADMIN_EMAIL")
         admin_password = os.getenv("ADMIN_PASSWORD")
+        logger.info(f"Admin bootstrap - Email from env: {admin_email}")
+        logger.info(f"Admin bootstrap - Password from env: {'SET' if admin_password else 'NOT SET'}")
+        
         if admin_email and admin_password:
             async with AsyncSessionLocal() as seed_session:
                 # Delete any existing admin with this email
-                await seed_session.execute(delete(User).where(User.email == admin_email))
+                logger.info(f"DELETING existing admin with email: {admin_email}")
+                result = await seed_session.execute(delete(User).where(User.email == admin_email))
                 await seed_session.commit()
-                logger.info(f"Deleted existing admin: {admin_email}")
+                logger.info(f"✅ DELETED {result.rowcount} existing admin(s)")
                 
                 # Create fresh admin with new password hash
+                new_password_hash = hash_password(admin_password)
+                logger.info(f"Creating fresh admin with email: {admin_email}")
                 new_admin = User(
                     email=admin_email,
-                    password_hash=hash_password(admin_password),
+                    password_hash=new_password_hash,
                     role="admin"
                 )
                 seed_session.add(new_admin)
                 await seed_session.commit()
                 await seed_session.refresh(new_admin)
-                logger.info(f"Created fresh admin: {admin_email} (ID: {new_admin.id})")
+                logger.info(f"✅ CREATED fresh admin: {admin_email} (ID: {new_admin.id}, Hash: {new_password_hash[:20]}...)")
         else:
-            logger.info("Admin bootstrap skipped - set ADMIN_EMAIL/ADMIN_PASSWORD to enable")
+            logger.error(f"❌ Admin bootstrap FAILED - Email: {admin_email}, Password set: {bool(admin_password)}")
     except Exception as exc:  # pragma: no cover
+        logger.error(f"❌ Admin bootstrap EXCEPTION: {str(exc)}")
         logger.exception("Admin bootstrap failed: %s", exc)
 
     _maybe_open_browser()
