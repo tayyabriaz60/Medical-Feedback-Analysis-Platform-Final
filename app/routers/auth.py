@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from jose import jwt, JWTError
@@ -44,6 +44,7 @@ class TokenResponse(BaseModel):
 
 @router.post("/register", response_model=dict, status_code=201)
 async def register(
+    request: Request,
     payload: RegisterRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional)
@@ -63,7 +64,11 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(
+    request: Request,
+    payload: LoginRequest,
+    db: AsyncSession = Depends(get_db)
+):
     logger.info(f"Login attempt for email: {payload.email}")
     
     # Check if user exists (case-insensitive email match)

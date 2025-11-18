@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from sqlalchemy import text
 import time
 
+
 from app.db import AsyncSessionLocal, get_pool_stats, check_db_connection
 
 router = APIRouter(prefix="/health", tags=["health"])

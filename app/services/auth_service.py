@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple
 import os
 import secrets
-import hashlib
 
 import bcrypt
 from jose import jwt
@@ -45,71 +44,46 @@ def generate_secret_key() -> str:
     return key
 
 
-def _truncate_password_for_bcrypt(password: str) -> str:
-    """
-    Truncate password to 72 bytes (bcrypt limit).
-    Note: bcrypt_sha256 handles this automatically, but we keep this for safety.
-    """
-    if not isinstance(password, str):
-        password = str(password)
-    # bcrypt_sha256 automatically handles long passwords via SHA-256 pre-hashing
-    # So truncation is not strictly needed, but we keep it for compatibility
-    password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        # Truncate to exactly 72 bytes
-        truncated_bytes = password_bytes[:72]
-        password = truncated_bytes.decode('utf-8', errors='ignore')
-        logger.warning(
-            f"Password truncated from {len(password_bytes)} bytes to 72 bytes (bcrypt limit)."
-        )
-    return password
-
-
 def hash_password(password: str) -> str:
     """
-    Hash password using bcrypt with SHA-256 pre-hashing.
-    Pre-hash with SHA-256 to ensure password is always 64 bytes (hex) before bcrypt,
-    avoiding bcrypt's 72-byte limit and compatibility issues.
-    Uses bcrypt library directly to avoid passlib initialization issues.
+    Hash password using bcrypt with 12 rounds.
+    Uses bcrypt directly for standard password hashing.
+    No pre-hashing needed - bcrypt handles passwords up to 72 bytes natively.
     """
     if not isinstance(password, str):
         password = str(password)
     
-    # Pre-hash with SHA-256 to ensure consistent 64-byte input
-    # SHA-256 hex digest is always exactly 64 bytes (32 bytes * 2 for hex)
     password_bytes = password.encode('utf-8')
-    sha256_hash = hashlib.sha256(password_bytes).hexdigest()  # Always 64 bytes (hex string)
     
-    # Convert to bytes for bcrypt (SHA-256 hex is 64 bytes, well under 72-byte limit)
-    sha256_bytes = sha256_hash.encode('utf-8')
+    # Truncate to 72 bytes if needed (bcrypt hard limit)
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+        logger.warning("Password truncated to 72 bytes (bcrypt limit)")
     
-    # Use bcrypt directly (bypasses passlib initialization issues)
-    # SHA-256 hash is always 64 bytes, so no truncation needed
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(sha256_bytes, salt)
+    # Generate salt and hash with 12 rounds (default: 12, good balance)
+    salt = bcrypt.gensalt(rounds=12)
+    hashed = bcrypt.hashpw(password_bytes, salt)
     return hashed.decode('utf-8')
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     """
-    Verify password using bcrypt with SHA-256 pre-hashing.
-    Pre-hash with SHA-256 to match hash_password behavior.
-    Uses bcrypt library directly to avoid passlib initialization issues.
+    Verify password against bcrypt hash.
+    Handles passwords up to 72 bytes without pre-hashing.
     """
     if not isinstance(password, str):
         password = str(password)
     
-    # Pre-hash with SHA-256 to match hash_password
-    password_bytes = password.encode('utf-8')
-    sha256_hash = hashlib.sha256(password_bytes).hexdigest()  # Always 64 bytes (hex)
-    
-    # Convert to bytes for bcrypt
-    sha256_bytes = sha256_hash.encode('utf-8')
-    password_hash_bytes = password_hash.encode('utf-8')
-    
     try:
-        # Use bcrypt directly (bypasses passlib initialization issues)
-        return bcrypt.checkpw(sha256_bytes, password_hash_bytes)
+        password_bytes = password.encode('utf-8')
+        
+        # Truncate to 72 bytes if needed (bcrypt hard limit)
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+            logger.warning("Password truncated to 72 bytes for verification (bcrypt limit)")
+        
+        password_hash_bytes = password_hash.encode('utf-8')
+        return bcrypt.checkpw(password_bytes, password_hash_bytes)
     except Exception as e:
         logger.error(f"Password verification failed: {e}")
         return False
@@ -180,11 +154,13 @@ async def ensure_or_update_admin_user(
     """
     Smart admin user management:
     - If user doesn't exist: CREATE new one
-    - If user exists but credentials different: UPDATE credentials
-    - If user exists and credentials same: DO NOTHING (return "unchanged")
+    - If user exists: Return existing (don't update password on startup)
     
     Returns:
-        Tuple[User, str]: (user_object, status) where status is "created", "updated", or "unchanged"
+        Tuple[User, str]: (user_object, status) where status is "created" or "existing"
+    
+    NOTE: Password changes should be handled via dedicated admin endpoint, not startup.
+    This prevents unnecessary database updates on every startup.
     """
     if not email or not password:
         logger.error("Admin email or password is empty")
@@ -194,23 +170,9 @@ async def ensure_or_update_admin_user(
     existing_user = await get_user_by_email(db, email)
     
     if existing_user:
-        # User exists - check if password is different
-        old_password_hash = existing_user.password_hash
-        new_password_hash = hash_password(password)
-        
-        if old_password_hash != new_password_hash:
-            # Credentials different - UPDATE password
-            logger.info(f"Updating admin user credentials: {email}")
-            existing_user.password_hash = new_password_hash
-            existing_user.role = role
-            await db.commit()
-            await db.refresh(existing_user)
-            logger.info(f"Admin user updated: {email}")
-            return existing_user, "updated"
-        else:
-            # Same credentials - DO NOTHING
-            logger.info(f"Admin user already exists with same credentials: {email}")
-            return existing_user, "unchanged"
+        # User exists - return as-is, don't update password
+        logger.info(f"Admin user already exists: {email} (ID: {existing_user.id})")
+        return existing_user, "existing"
     else:
         # User doesn't exist - CREATE
         logger.info(f"Creating admin user: {email}")

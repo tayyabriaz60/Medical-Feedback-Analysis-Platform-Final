@@ -11,10 +11,13 @@ import webbrowser
 from contextlib import asynccontextmanager
 
 import socketio
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from app.db import AsyncSessionLocal, init_db
 from app.logging_config import get_logger, setup_logging
@@ -26,6 +29,9 @@ from app.sockets.events import sio
 from app.utils.errors import APIError, api_error_handler, generic_error_handler
 
 logger = get_logger(__name__)
+
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
 
 
 def _validate_configuration() -> None:
@@ -93,6 +99,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Setup rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS configuration - allow specific origins
 allowed_origins = [

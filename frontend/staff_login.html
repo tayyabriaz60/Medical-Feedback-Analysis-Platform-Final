@@ -63,9 +63,12 @@
                     throw new Error(err.detail || 'Login failed');
                 }
                 const data = await res.json();
-                // Persist token in sessionStorage (clears on tab close)
-                sessionStorage.setItem('access_token', data.access_token);
-                sessionStorage.setItem('role', data.role || '');
+                // Persist token in localStorage with expiry tracking (shared across tabs)
+                const expiryTime = Date.now() + (3600 * 1000); // 1 hour
+                localStorage.setItem('access_token', data.access_token);
+                localStorage.setItem('refresh_token', data.refresh_token);
+                localStorage.setItem('token_expiry', expiryTime);
+                localStorage.setItem('role', data.role || '');
                 // Redirect to dashboard (existing UI at /)
                 window.location.href = '/';
             } catch (err) {

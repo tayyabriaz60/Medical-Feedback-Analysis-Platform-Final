@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from typing import Any, Dict, Optional
 
 import httpx
@@ -26,7 +27,7 @@ logger = get_logger(__name__)
 
 
 class GeminiService:
-    """Service for interacting with Gemini AI via HTTPx."""
+    """Service for interacting with Gemini AI via HTTPx with Circuit Breaker Pattern."""
 
     def __init__(self) -> None:
         self.api_key = os.getenv("GOOGLE_API_KEY")
@@ -36,6 +37,40 @@ class GeminiService:
         # Model name should be just the model identifier, not "models/..."
         self.model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         self.timeout = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30"))
+        
+        # Circuit breaker state
+        self.failure_count = 0
+        self.circuit_open_until = None
+        self.max_failures_before_open = 5
+        self.circuit_open_duration = 60  # seconds
+
+    def is_circuit_open(self) -> bool:
+        """Check if circuit breaker is open (service temporarily unavailable)."""
+        if self.circuit_open_until and time.time() < self.circuit_open_until:
+            return True
+        if self.circuit_open_until and time.time() >= self.circuit_open_until:
+            # Circuit reset, log it
+            logger.info("Circuit breaker reset - attempting service recovery")
+            self.circuit_open_until = None
+            self.failure_count = 0
+        return False
+
+    def record_success(self) -> None:
+        """Record successful call - reset failure count."""
+        if self.failure_count > 0:
+            logger.info(f"Gemini API success - resetting failure count from {self.failure_count}")
+            self.failure_count = 0
+
+    def record_failure(self) -> None:
+        """Record failed call - increment failure count and open circuit if needed."""
+        self.failure_count += 1
+        logger.warning(f"Gemini API failure recorded ({self.failure_count}/{self.max_failures_before_open})")
+        
+        if self.failure_count >= self.max_failures_before_open:
+            self.circuit_open_until = time.time() + self.circuit_open_duration
+            logger.error(
+                f"Circuit breaker OPEN - Gemini API temporarily unavailable for {self.circuit_open_duration}s"
+            )
 
     async def analyze_feedback(
         self,
@@ -141,7 +176,14 @@ class GeminiService:
         rating: Optional[int] = None,
         max_retries: int = 3,
     ) -> Dict[str, Any]:
-        """Analyze feedback with exponential backoff retries."""
+        """Analyze feedback with exponential backoff retries and circuit breaker."""
+        # Check if circuit is open
+        if self.is_circuit_open():
+            return {
+                "error": "Gemini API temporarily unavailable (circuit breaker open)",
+                "retry": False,
+            }
+        
         last_result: Dict[str, Any] = {"error": "Unknown error"}
         for attempt in range(max_retries):
             result = await self.analyze_feedback(
@@ -152,12 +194,24 @@ class GeminiService:
                 rating=rating,
             )
             if "error" not in result:
+                self.record_success()
                 return result
+            
             last_result = result
+            
+            # Non-retryable errors
             if not result.get("retry", False) and "retry_after" not in result:
+                self.record_failure()
                 return result
-            wait_time = result.get("retry_after") or 2**attempt
+            
+            # Calculate wait time with exponential backoff (capped at 30 seconds)
+            wait_time = result.get("retry_after") or min(2**attempt, 30)
+            logger.info(f"Retrying Gemini analysis (attempt {attempt + 1}/{max_retries}) after {wait_time}s")
             await asyncio.sleep(wait_time)
+        
+        # All retries exhausted
+        self.record_failure()
+        logger.error(f"Gemini analysis failed after {max_retries} attempts")
         return last_result
 
     @staticmethod
