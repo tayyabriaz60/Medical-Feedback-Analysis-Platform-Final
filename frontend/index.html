@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Feedback Analysis Platform</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-hospital"></i> Medical Feedback Platform</h1>
+                <p>AI-Powered Feedback Analysis System</p>
+            </div>
+            <div id="authControls"></div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="tabs">
+            <button id="submitTabBtn" class="tab-btn active" onclick="showTab('submit')">
+                <i class="fas fa-plus-circle"></i> Submit Feedback
+            </button>
+            <button id="dashboardTabBtn" class="tab-btn" onclick="showTab('dashboard')">
+                <i class="fas fa-chart-line"></i> Dashboard
+            </button>
+            <button id="urgentTabBtn" class="tab-btn urgent-tab" onclick="showTab('urgent')">
+                <i class="fas fa-exclamation-triangle"></i> Urgent Feedback
+            </button>
+            <button id="analyticsTabBtn" class="tab-btn" onclick="showTab('analytics')">
+                <i class="fas fa-analytics"></i> Analytics
+            </button>
+        </div>
+
+        <!-- Alert Container -->
+        <div id="alertContainer"></div>
+
+        <!-- Submit Feedback Tab -->
+        <div id="submitTab" class="tab-content active">
+            <!-- Confirmation Message (hidden by default) -->
+            <div id="confirmationMessage" class="card confirmation-card" style="display: none;">
+                <div class="confirmation-content">
+                    <i class="fas fa-check-circle success-icon"></i>
+                    <h2>Thank You for Your Feedback!</h2>
+                    <p>Your feedback has been submitted successfully. We will review it shortly.</p>
+                    <p class="confirmation-note">Our AI system is analyzing your feedback in the background. Staff will be notified if any urgent action is needed.</p>
+                    <button class="btn btn-primary" onclick="resetForm()">
+                        <i class="fas fa-plus"></i> Submit Another Feedback
+                    </button>
+                </div>
+            </div>
+
+            <!-- Feedback Form -->
+            <div id="feedbackFormContainer" class="card">
+                <h2><i class="fas fa-comment-medical"></i> Submit Patient Feedback</h2>
+                <form id="feedbackForm">
+                    <div class="form-group">
+                        <label for="patientName">Patient Name (Optional)</label>
+                        <input type="text" id="patientName" placeholder="Enter patient name">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="visitDate">Visit Date *</label>
+                            <input type="datetime-local" id="visitDate" required>
+                        </div>
+                    <div class="form-group">
+                        <label for="department">Department *</label>
+                        <select id="department" required>
+                            <option value="">Select Department</option>
+                            <option value="Emergency">Emergency</option>
+                            <option value="OPD">OPD</option>
+                            <option value="IPD">IPD</option>
+                            <option value="Lab">Lab</option>
+                            <option value="Pharmacy">Pharmacy</option>
+                            <option value="Cardiology">Cardiology</option>
+                            <option value="Neurology">Neurology</option>
+                            <option value="Orthopedics">Orthopedics</option>
+                            <option value="Pediatrics">Pediatrics</option>
+                            <option value="General Medicine">General Medicine</option>
+                        </select>
+                    </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="doctorName">Doctor Name (Optional)</label>
+                        <input type="text" id="doctorName" placeholder="Enter doctor name">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="feedbackText">Feedback *</label>
+                        <textarea id="feedbackText" rows="6" placeholder="Describe your experience..." required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rating">Rating *</label>
+                        <div class="rating-container">
+                            <input type="range" id="rating" min="1" max="5" value="3" oninput="updateRatingDisplay(this.value)">
+                            <div class="rating-display">
+                                <span id="ratingValue">3</span>
+                                <div class="stars" id="starsDisplay"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane"></i> Submit Feedback
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboardTab" class="tab-content">
+            <div class="dashboard-header">
+                <h2><i class="fas fa-tachometer-alt"></i> Staff Dashboard</h2>
+                <div class="filters">
+                    <select id="filterDepartment" onchange="loadFeedback()">
+                        <option value="">All Departments</option>
+                        <option value="Emergency">Emergency</option>
+                        <option value="OPD">OPD</option>
+                        <option value="Lab">Lab</option>
+                        <option value="Cardiology">Cardiology</option>
+                        <option value="Neurology">Neurology</option>
+                        <option value="Orthopedics">Orthopedics</option>
+                        <option value="Pediatrics">Pediatrics</option>
+                        <option value="General Medicine">General Medicine</option>
+                    </select>
+                    <select id="filterStatus" onchange="loadFeedback()">
+                        <option value="">All Status</option>
+                        <option value="pending_analysis">Pending Analysis</option>
+                        <option value="reviewed">Reviewed</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="resolved">Resolved</option>
+                    </select>
+                    <select id="filterUrgency" onchange="loadFeedback()">
+                        <option value="">All Urgency</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="loadFeedback()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+            </div>
+
+            <!-- Critical Alerts Banner -->
+            <div id="criticalAlerts" class="critical-alerts-container"></div>
+
+            <!-- Feedback Table -->
+            <div class="table-container">
+                <table class="feedback-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Patient</th>
+                            <th>Department</th>
+                            <th>Feedback</th>
+                            <th>Rating</th>
+                            <th>Status</th>
+                            <th>Sentiment</th>
+                            <th>Urgency</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="feedbackTableBody">
+                        <tr>
+                            <td colspan="9" class="loading">Loading feedback...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <span class="stat-label">Total:</span>
+                    <span class="stat-value" id="totalCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Critical:</span>
+                    <span class="stat-value critical" id="criticalCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Pending:</span>
+                    <span class="stat-value" id="pendingCount">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Urgent Feedback Tab -->
+        <div id="urgentTab" class="tab-content">
+            <div class="dashboard-header">
+                <h2><i class="fas fa-exclamation-triangle"></i> Urgent & Critical Feedback</h2>
+            </div>
+
+            <div id="urgentFeedbackList" class="feedback-list">
+                <div class="loading">Loading urgent feedback...</div>
+            </div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="analyticsTab" class="tab-content">
+            <div class="analytics-container">
+                <h2><i class="fas fa-chart-bar"></i> Analytics & Insights</h2>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon"><i class="fas fa-comments"></i></div>
+                        <div class="stat-info">
+                            <h3 id="totalFeedback">-</h3>
+                            <p>Total Feedback</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon positive"><i class="fas fa-smile"></i></div>
+                        <div class="stat-info">
+                            <h3 id="positiveCount">-</h3>
+                            <p>Positive</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon negative"><i class="fas fa-frown"></i></div>
+                        <div class="stat-info">
+                            <h3 id="negativeCount">-</h3>
+                            <p>Negative</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon critical"><i class="fas fa-exclamation-triangle"></i></div>
+                        <div class="stat-info">
+                            <h3 id="criticalCount">-</h3>
+                            <p>Critical Issues</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="analytics-section">
+                    <h3>Department Performance</h3>
+                    <div id="departmentRatings" class="department-list"></div>
+                </div>
+
+                <div class="analytics-section">
+                    <h3>Top Issues</h3>
+                    <div id="topIssues" class="issues-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Detail Modal -->
+    <div id="feedbackModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <!-- Staff Action Modal -->
+    <div id="actionModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeActionModal()">&times;</span>
+            <h2><i class="fas fa-tasks"></i> Staff Action</h2>
+            <form id="actionForm">
+                <input type="hidden" id="actionFeedbackId">
+                <div class="form-group">
+                    <label for="actionStatus">Status *</label>
+                    <select id="actionStatus" required>
+                        <option value="reviewed">Reviewed</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="resolved">Resolved</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="staffNote">Staff Note</label>
+                    <textarea id="staffNote" rows="4" placeholder="Add your notes here..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="assignedDepartment">Assign to Department</label>
+                    <select id="assignedDepartment">
+                        <option value="">None</option>
+                        <option value="Emergency">Emergency</option>
+                        <option value="OPD">OPD</option>
+                        <option value="Lab">Lab</option>
+                        <option value="Cardiology">Cardiology</option>
+                        <option value="Neurology">Neurology</option>
+                        <option value="Orthopedics">Orthopedics</option>
+                        <option value="Pediatrics">Pediatrics</option>
+                        <option value="General Medicine">General Medicine</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Action
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
+

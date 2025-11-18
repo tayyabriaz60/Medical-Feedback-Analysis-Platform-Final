@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: medical-feedback-platform
+    env: python
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:asgi_app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SQL_ECHO
+        value: "false"
+      - key: AUTO_OPEN_BROWSER
+        value: "0"
+    healthCheckPath: /health
+
+databases:
+  - name: feedback-db
+    databaseName: feedback_db
+    user: feedback_user
+    plan: free
+
