@@ -83,9 +83,19 @@ def verify_password(password: str, password_hash: str) -> bool:
             logger.warning("Password truncated to 72 bytes for verification (bcrypt limit)")
         
         password_hash_bytes = password_hash.encode('utf-8')
-        return bcrypt.checkpw(password_bytes, password_hash_bytes)
+        
+        # DEBUG LOGGING
+        logger.info(f"[VERIFY] Password length: {len(password)}, Hash length: {len(password_hash)}")
+        logger.info(f"[VERIFY] Hash from DB: {password_hash[:50]}...")
+        logger.info(f"[VERIFY] Attempting bcrypt.checkpw...")
+        
+        result = bcrypt.checkpw(password_bytes, password_hash_bytes)
+        
+        logger.info(f"[VERIFY] Result: {result}")
+        return result
     except Exception as e:
-        logger.error(f"Password verification failed: {e}")
+        logger.error(f"[VERIFY] Password verification FAILED with exception: {str(e)}")
+        logger.exception("Exception details:")
         return False
 
 
