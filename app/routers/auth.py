@@ -187,6 +187,7 @@ async def me(current_user: User = Depends(get_current_user)):
     return {"id": current_user.id, "email": current_user.email, "role": current_user.role}
 
 
+@router.get("/setup-admin", response_model=dict)
 @router.post("/setup-admin", response_model=dict, status_code=201)
 async def setup_admin(db: AsyncSession = Depends(get_db)):
     """
@@ -194,6 +195,7 @@ async def setup_admin(db: AsyncSession = Depends(get_db)):
     - Deletes any existing admin with same email
     - Creates fresh admin with ENV credentials
     - Use this to fix login issues
+    - Works with both GET and POST requests
     """
     # Get credentials from environment
     admin_email = os.getenv("ADMIN_EMAIL")
